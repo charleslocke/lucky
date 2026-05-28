@@ -3,7 +3,7 @@ export interface Participant {
   name: string;
   dept: string;
   mustWinPrizeId: string | null; // 内定中特定奖项 ID，null 为无内定
-  banned: boolean;
+  bannedPrizes: string[];
   weight: number;
 }
 
@@ -29,5 +29,6 @@ export interface Settings {
   prizePageTitle: string;  // 奖项页标题
   logo?: string;  // 公司 logo (base64)
   showDept?: boolean;  // 抽奖及中奖界面是否显示部门选项
-  scrollMode?: 'none' | 'scroll';  // 大屏显示多中奖者时的展示模式（none 为平铺，scroll 为滚动）
+  scrollMode?: 'none' | 'scroll' | 'page';  // 大屏显示多中奖者时的展示模式（none 为平铺，scroll 为滚动，page 为翻页）
+  winnersPerPage?: number;                 // 翻页模式下每屏显示的最多数
 }

@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -62,7 +64,7 @@ export default function AdminPage() {
   // Person Edit State
   const [editingPerson, setEditingPerson] = useState<any>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", dept: "", mustWinPrizeId: "none", banned: false, weight: 1 });
+  const [editForm, setEditForm] = useState({ name: "", dept: "", mustWinPrizeId: "none", bannedPrizes: [] as string[], weight: 1 });
 
   // Prize Edit State
   const [editingPrize, setEditingPrize] = useState<any>(null);
@@ -79,6 +81,7 @@ export default function AdminPage() {
     logo: settings.logo || '',
     showDept: settings.showDept || false,
     scrollMode: settings.scrollMode || 'none',
+    winnersPerPage: settings.winnersPerPage || 24,
   });
 
   // 当 settings 变化时同步到表单（首次加载或外部变化）
@@ -92,8 +95,9 @@ export default function AdminPage() {
       logo: settings.logo || '',
       showDept: settings.showDept || false,
       scrollMode: settings.scrollMode || 'none',
+      winnersPerPage: settings.winnersPerPage || 24,
     });
-  }, [settings.title, settings.welcomeTitle, settings.welcomeSubtitle, settings.prizePageTitle, settings.password, settings.logo, settings.showDept, settings.scrollMode]);
+  }, [settings.title, settings.welcomeTitle, settings.welcomeSubtitle, settings.prizePageTitle, settings.password, settings.logo, settings.showDept, settings.scrollMode, settings.winnersPerPage]);
 
   // Search
   const [searchTerm, setSearchTerm] = useState("");
@@ -284,7 +288,7 @@ export default function AdminPage() {
 
   const openAddDialog = () => {
     setEditingPerson(null);
-    setEditForm({ name: "", dept: "", mustWinPrizeId: "none", banned: false, weight: 1 });
+    setEditForm({ name: "", dept: "", mustWinPrizeId: "none", bannedPrizes: [], weight: 1 });
     setIsDialogOpen(true);
   };
 
@@ -294,7 +298,7 @@ export default function AdminPage() {
         name: person.name,
         dept: person.dept,
         mustWinPrizeId: person.mustWinPrizeId || "none",
-        banned: person.banned,
+        bannedPrizes: person.bannedPrizes || [],
         weight: person.weight
     });
     setIsDialogOpen(true);
@@ -429,7 +433,7 @@ export default function AdminPage() {
     p.name.includes(searchTerm) || p.dept.includes(searchTerm)
   );
   const winnerIds = new Set(winners.map(w => w.id));
-  const validPool = participants.filter(p => !winnerIds.has(p.id) && !p.banned);
+  const validPool = participants.filter(p => !winnerIds.has(p.id) && (currentPrizeId ? !(p.bannedPrizes || []).includes(currentPrizeId) : true));
   const finalPool = currentPrizeId
     ? validPool.filter(p => !p.mustWinPrizeId || p.mustWinPrizeId === currentPrizeId)
     : [];
@@ -638,7 +642,7 @@ export default function AdminPage() {
                           <div className="text-sm flex items-center gap-2">
                               <span>禁中: </span>
                               <span className="font-mono font-bold px-2 rounded min-w-[30px] text-center">
-                                  {participants.filter(p=>p.banned).length}
+                                  {participants.filter(p=>(p.bannedPrizes || []).length > 0).length}
                               </span>
                           </div>
                       </div>
@@ -681,7 +685,14 @@ export default function AdminPage() {
                                                     {p.mustWinPrizeId ? <Badge variant="secondary">{prizeName || '未知奖项'}</Badge> : <span className="text-muted-foreground">-</span>}
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    {p.banned ? <Badge variant="destructive">禁止</Badge> : <span className="text-muted-foreground">-</span>}
+                                                    {(p.bannedPrizes || []).length > 0 ? (
+                                                        <div className="flex flex-wrap justify-center gap-1">
+                                                            {(p.bannedPrizes || []).map(id => {
+                                                                const prize = prizes.find(pr => pr.id === id);
+                                                                return prize ? <Badge key={id} variant="destructive" className="text-xs">{prize.name}</Badge> : null;
+                                                            })}
+                                                        </div>
+                                                    ) : <span className="text-muted-foreground">-</span>}
                                                 </TableCell>
                                                 <TableCell className="text-center text-xs font-mono text-muted-foreground">{p.weight}</TableCell>
                                               </>
@@ -800,15 +811,43 @@ export default function AdminPage() {
                  <Label>奖项页标题</Label>
                  <Input value={settingsForm.prizePageTitle} onChange={e => setSettingsForm({...settingsForm, prizePageTitle: e.target.value})} />
                </div>
-                <div className="flex items-center justify-between border p-3 rounded-lg bg-muted/20">
-                  <div className="space-y-0.5">
-                    <Label>大屏多中奖者自动滚动</Label>
-                    <p className="text-xs text-muted-foreground">如果单轮中奖人数过多导致溢出，大屏端在保持中奖信息置顶的同时，姓名名单会慢慢向上滚动展示。</p>
+                <div className="space-y-4 border p-4 rounded-xl bg-muted/20">
+                  <div className="space-y-2">
+                    <Label>大屏多中奖者展示模式</Label>
+                    <p className="text-xs text-muted-foreground">当单轮抽取的获奖人数较多溢出屏幕时的呈现方式。</p>
+                    <Select 
+                      value={settingsForm.scrollMode} 
+                      onValueChange={value => setSettingsForm({...settingsForm, scrollMode: value as any})}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="选择展示模式" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">常规平铺布局 (溢出时支持鼠标滚动)</SelectItem>
+                        <SelectItem value="scroll">谢幕式自动滚动 (平缓匀速，自动循环)</SelectItem>
+                        <SelectItem value="page">演示翻页模式 (支持键盘/翻页笔手动切页)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Switch
-                    checked={settingsForm.scrollMode === 'scroll'}
-                    onCheckedChange={checked => setSettingsForm({...settingsForm, scrollMode: checked ? 'scroll' : 'none'})}
-                  />
+                  {settingsForm.scrollMode === 'page' && (
+                    <div className="space-y-2 pt-3 border-t border-dashed">
+                      <Label>每页最多显示人数</Label>
+                      <Select 
+                        value={String(settingsForm.winnersPerPage)} 
+                        onValueChange={value => setSettingsForm({...settingsForm, winnersPerPage: parseInt(value, 10)})}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="选择每页显示人数" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="12">每页 12 人 (推荐，字号超大清晰)</SelectItem>
+                          <SelectItem value="24">每页 24 人 (标准网格布局)</SelectItem>
+                          <SelectItem value="36">每页 36 人 (较紧凑布局)</SelectItem>
+                          <SelectItem value="48">每页 48 人 (多人数大屏展现)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
                <div className="flex items-center justify-between border p-3 rounded-lg bg-muted/20">
                  <div className="space-y-0.5">
@@ -873,12 +912,61 @@ export default function AdminPage() {
                         </div>
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
-                        <Label className="text-right">特殊标记</Label>
+                        <Label className="text-right">奖项黑名单</Label>
                         <div className="col-span-3">
-                            <div className="flex items-center space-x-2">
-                                <Switch id="banned" checked={editForm.banned} onCheckedChange={c => setEditForm({...editForm, banned: c})} />
-                                <Label htmlFor="banned">禁止中奖 (黑名单)</Label>
-                            </div>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full justify-between"
+                                    >
+                                        <span>
+                                            {editForm.bannedPrizes.length === 0
+                                                ? "选择禁止奖项..."
+                                                : editForm.bannedPrizes.length === prizes.length
+                                                ? "全选"
+                                                : `已选择 ${editForm.bannedPrizes.length} 项`}
+                                        </span>
+                                        <span className="text-xs">▼</span>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-56 p-0" align="start">
+                                    <div className="p-3 space-y-2 bg-zinc-950/95 border border-zinc-800 text-white rounded-lg backdrop-blur">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="w-full justify-start h-8 text-xs hover:bg-zinc-800"
+                                            onClick={() => {
+                                                if (editForm.bannedPrizes.length === prizes.length) {
+                                                    setEditForm({...editForm, bannedPrizes: []});
+                                                } else {
+                                                    setEditForm({...editForm, bannedPrizes: prizes.map(p => p.id)});
+                                                }
+                                            }}
+                                        >
+                                            {editForm.bannedPrizes.length === prizes.length ? "取消全选" : "全选"}
+                                        </Button>
+                                        <div className="border-t border-zinc-800 pt-2 space-y-1">
+                                            {prizes.map(prize => (
+                                                <div key={prize.id} className="flex items-center space-x-2 p-1.5 hover:bg-zinc-800 rounded">
+                                                    <Checkbox
+                                                        id={`banned-popover-${prize.id}`}
+                                                        checked={editForm.bannedPrizes.includes(prize.id)}
+                                                        onCheckedChange={(checked) => {
+                                                            if (checked) {
+                                                                setEditForm({...editForm, bannedPrizes: [...editForm.bannedPrizes, prize.id]});
+                                                            } else {
+                                                                setEditForm({...editForm, bannedPrizes: editForm.bannedPrizes.filter(id => id !== prize.id)});
+                                                            }
+                                                        }}
+                                                    />
+                                                    <Label htmlFor={`banned-popover-${prize.id}`} className="text-sm cursor-pointer select-none text-zinc-300">{prize.name}</Label>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                     </div>
                   </>
