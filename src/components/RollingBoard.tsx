@@ -377,13 +377,16 @@ export default function RollingBoard({ isRolling, candidates, currentWinners }: 
               {/* Rolling Area / Winner Display (中奖者列表滚动容器) */}
               <div 
                 ref={scrollContainerRef}
-                className="w-full flex-1 min-h-0 overflow-y-auto no-scrollbar relative flex items-center justify-center perspective-1000 py-2"
+                className={cn(
+                  "w-full flex-1 min-h-0 overflow-y-auto no-scrollbar relative perspective-1000 py-2",
+                  !showWinners && "flex items-center justify-center"
+                )}
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
               >
                 <AnimatePresence mode="wait">
                   {showWinners ? (
                     // Winner Display (Flex centered with smooth auto scroll)
-                    <div className="w-full h-full">
+                    <div className="w-full">
                       <div
                         className="grid gap-4 w-full"
                         style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${winnerCardMinWidth}px, 1fr))` }}
